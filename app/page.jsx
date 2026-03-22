@@ -195,42 +195,32 @@ function PropertiesPage({data,user,reload,setPage}){
   </div>);
 }
 
-// ══════ PROPERTY DETAIL (Rendite, 10J-Cashflow, ImmoScout, NK, Fotos) ══════
+// ══════ PROPERTY DETAIL (alle Tabs) ══════
 function PropertyDetailPage({id,data,user,reload,setPage}){
-  const p=data.properties.find(x=>x.id===id);
-  const tenant=data.tenants.find(t=>t.property_id===id);
-  const propCosts=data.costs.filter(c=>c.property_id===id);
-  const propTickets=data.tickets.filter(t=>t.property_id===id);
-  const propDocs=data.documents.filter(d=>d.property_id===id);
-  const [tab,setTab]=useState('info');
-  const [scoutText,setScoutText]=useState('');
+  const p=data.properties.find(x=>x.id===id);const tenant=data.tenants.find(t=>t.property_id===id);const allTenants=data.tenants.filter(t=>t.property_id===id);
+  const propCosts=data.costs.filter(c=>c.property_id===id);const propDocs=data.documents.filter(d=>d.property_id===id);
+  const [tab,setTab]=useState('info');const [scoutText,setScoutText]=useState('');const [tenantModal,setTenantModal]=useState(null);const [tf,setTf]=useState({});const [nkYear,setNkYear]=useState('2025');
   if(!p)return<div><button className="btn btn-secondary" onClick={()=>setPage('properties')}>← Zurück</button><p style={{marginTop:16}}>Nicht gefunden.</p></div>;
-
   const nk=p.nk||{};const nkTotal=Object.values(nk).reduce((s,v)=>s+(v||0),0);
-  const annualRent=((p.cold_rent||0)+(p.parking_rent||0))*12;
-  const annualCosts=(p.maintenance_reserve||0)*12;
-  const annualLoan=(p.loan_monthly_payment||0)*12;
-  const bruttoR=p.purchase_price?(annualRent/p.purchase_price*100):0;
-  const nettoR=p.purchase_price?((annualRent-annualCosts-annualLoan)/p.purchase_price*100):0;
-  const marketR=p.market_value?(annualRent/p.market_value*100):0;
-  const monthlyCF=(p.cold_rent||0)+(p.parking_rent||0)-(p.loan_monthly_payment||0)-(p.maintenance_reserve||0);
-
-  const projection=[];
-  for(let y=0;y<10;y++){const rg=Math.pow(1.015,y);const inc=annualRent*rg;const res=annualCosts;const ln=annualLoan;projection.push({year:2026+y,income:inc,reserve:res,loan:ln,netCF:inc-res-ln});}
+  const annualRent=((p.cold_rent||0)+(p.parking_rent||0))*12;const annualCosts=(p.maintenance_reserve||0)*12;const annualLoan=(p.loan_monthly_payment||0)*12;
+  const bruttoR=p.purchase_price?(annualRent/p.purchase_price*100):0;const nettoR=p.purchase_price?((annualRent-annualCosts-annualLoan)/p.purchase_price*100):0;const marketR=p.market_value?(annualRent/p.market_value*100):0;const monthlyCF=(p.cold_rent||0)+(p.parking_rent||0)-(p.loan_monthly_payment||0)-(p.maintenance_reserve||0);
+  const projection=[];for(let y=0;y<10;y++){const rg=Math.pow(1.015,y);projection.push({year:2026+y,income:annualRent*rg,reserve:annualCosts,loan:annualLoan,netCF:annualRent*rg-annualCosts-annualLoan});}
   const maxCF=Math.max(...projection.map(r=>Math.abs(r.netCF)),1);
-
-  const features=[];if(p.balcony)features.push('Balkon');if(p.cellar)features.push('Keller');if(p.elevator)features.push('Aufzug');if(p.has_parking)features.push('Tiefgaragenstellplatz');
-
-  const genScout=()=>{setScoutText(`═══ IMMOSCOUT24 INSERAT ═══\n\nTITEL:\n${p.rooms}-Zimmer-${p.type} in ${p.address?.split(',').pop()?.trim()||''} | ${p.area} m²${p.balcony?' | Balkon':''}${p.has_parking?' | Stellplatz':''}\n\nBESCHREIBUNG:\n${p.description||`Schöne ${p.rooms}-Zimmer-Wohnung.`}\n\n─── OBJEKTDATEN ───\nWohnfläche: ${p.area} m²\nZimmer: ${p.rooms}\nEtage: ${p.floor||'–'} von ${p.total_floors||'–'}\nBaujahr: ${p.year}\nHeizung: ${p.heating_type||'–'}\nEnergie: ${p.energy_class||'–'}\nAusstattung: ${features.join(', ')||'–'}\n\n─── MIETKONDITIONEN ───\nKaltmiete: ${fmt(p.cold_rent)}\nNebenkosten: ${fmt(p.utilities)} (Vorauszahlung)\nGesamtmiete: ${fmt(p.total_rent)}\n${p.has_parking?`Stellplatz: ${fmt(p.parking_rent)}\n`:''}Kaution: ${fmt(p.deposit)}${p.cold_rent?` (${Math.round((p.deposit||0)/(p.cold_rent))} Monatsmieten)`:''}\n\n─── NK-AUFSCHLÜSSELUNG ───\n${Object.entries(NK_LABELS).map(([k,l])=>`${l}: ${fmt(nk[k]||0)}`).join('\n')}\nGesamt: ${fmt(nkTotal)}\n\nVERFÜGBAR: ${tenant?'Nach Kündigung':'Sofort'}\nKONTAKT: [Ihre Daten]`);};
-
-  const copyText=(t)=>{navigator.clipboard?.writeText(t).then(()=>alert('Kopiert!')).catch(()=>{});};
-
+  const features=[];if(p.balcony)features.push('Balkon');if(p.cellar)features.push('Keller');if(p.elevator)features.push('Aufzug');if(p.has_parking)features.push('TG-Stellplatz');
+  const pricePerSqm=p.area?(p.cold_rent/p.area):0;
+  const lastIncrease=propDocs.filter(d=>d.notes?.toLowerCase().includes('mieterhöhung')||d.notes?.toLowerCase().includes('mieterhoehung')).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+  const monthsSince=lastIncrease?.date?Math.floor((new Date()-new Date(lastIncrease.date))/(1000*60*60*24*30)):null;
+  const nextAllowed=monthsSince!==null?Math.max(0,15-monthsSince):null;
+  const genNk=()=>{const yc=propCosts.filter(c=>(c.date||'').startsWith(nkYear));const um=yc.filter(c=>['Hausgeld','Versicherung'].includes(c.category));const tot=um.reduce((s,c)=>s+(c.amount||0),0);const vz=(p.utilities||0)*12;return{um,tot,vz,diff:vz-tot};};
+  const saveTenant=async()=>{const row={...tf,deposit:Number(tf.deposit)||0};if(tenantModal==='new'){delete row.id;row.user_id=user.id;row.property_id=id;await supabase.from('tenants').insert(row);}else{const{id:tid,user_id,created_at,household_id,...upd}=row;await supabase.from('tenants').update(upd).eq('id',tid);}await reload();setTenantModal(null);};
+  const delTenant=async(tid)=>{if(confirm('Mieter entfernen?')){await supabase.from('tenants').delete().eq('id',tid);await reload();}};
+  const genScout=()=>{setScoutText(`═══ IMMOSCOUT24 INSERAT ═══\n\nTITEL: ${p.rooms}-Zi-${p.type} ${p.address?.split(',').pop()?.trim()||''} | ${p.area}m²${p.balcony?' | Balkon':''}${p.has_parking?' | Stellplatz':''}\n\nBESCHREIBUNG:\n${p.description||`Schöne ${p.rooms}-Zimmer-Wohnung.`}\n\nOBJEKT: ${p.area}m² · ${p.rooms}Zi · ${p.floor||'–'}/${p.total_floors||'–'}OG · Bj.${p.year}\nHeizung: ${p.heating_type||'–'} · Energie: ${p.energy_class||'–'}\nAusstattung: ${features.join(', ')||'–'}\n\nMIETE: Kalt ${fmt(p.cold_rent)} · NK ${fmt(p.utilities)} · Gesamt ${fmt(p.total_rent)}\n${p.has_parking?`Stellplatz: ${fmt(p.parking_rent)}\n`:''}Kaution: ${fmt(p.deposit)}\n\nNK: ${Object.entries(NK_LABELS).map(([k,l])=>`${l}: ${fmt(nk[k]||0)}`).join(' · ')}\n\nVERFÜGBAR: ${tenant?'Nach Kündigung':'Sofort'}`);};
+  const cp=(t)=>{navigator.clipboard?.writeText(t).then(()=>alert('Kopiert!')).catch(()=>{});};
   return(<div>
-    <button className="btn btn-secondary" onClick={()=>setPage('properties')} style={{marginBottom:16}}>← Alle Immobilien</button>
+    <button className="btn btn-secondary" onClick={()=>setPage('properties')} style={{marginBottom:16}}>← Zurück</button>
     <div className="page-header"><div><h2>{p.name}</h2><p>{p.address}</p></div><span className={`badge ${p.status==='vermietet'?'badge-green':'badge-gray'}`} style={{fontSize:13,padding:'6px 14px'}}>{p.status}</span></div>
-
     <div style={{display:'flex',gap:4,marginBottom:20,background:'var(--surface2)',padding:3,borderRadius:10,flexWrap:'wrap'}}>
-      {['info','rendite','cashflow','nk','scout'].map(t=><button key={t} className={`btn btn-sm ${tab===t?'btn-primary':'btn-ghost'}`} onClick={()=>setTab(t)}>{{info:'Übersicht',rendite:'Rendite',cashflow:'10J-Cashflow',nk:'Nebenkosten',scout:'ImmoScout'}[t]}</button>)}
+      {[['info','Übersicht'],['mieter','Mieter'],['rendite','Rendite'],['cashflow','10J-CF'],['mietanpassung','Anpassung'],['nkabrechnung','NK-Abr.'],['nk','NK-Details'],['scout','ImmoScout']].map(([k,l])=><button key={k} className={`btn btn-sm ${tab===k?'btn-primary':'btn-ghost'}`} onClick={()=>setTab(k)}>{l}</button>)}
     </div>
 
     {tab==='info'&&<div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:20}}>
@@ -241,98 +231,124 @@ function PropertyDetailPage({id,data,user,reload,setPage}){
             <div><span className="text-muted">Fläche:</span> {p.area} m²</div><div><span className="text-muted">Zimmer:</span> {p.rooms}</div>
             <div><span className="text-muted">Etage:</span> {p.floor||'–'}/{p.total_floors||'–'}</div><div><span className="text-muted">Baujahr:</span> {p.year}</div>
             <div><span className="text-muted">Heizung:</span> {p.heating_type||'–'}</div><div><span className="text-muted">Energie:</span> {p.energy_class||'–'}</div>
-            <div><span className="text-muted">Balkon:</span> {p.balcony?'Ja':'Nein'}</div><div><span className="text-muted">Keller:</span> {p.cellar?'Ja':'Nein'}</div>
-            <div><span className="text-muted">Aufzug:</span> {p.elevator?'Ja':'Nein'}</div>
-            {p.has_parking&&<div><span className="text-muted">Stellplatz:</span> {fmt(p.parking_rent)}/M</div>}
+            {features.length>0&&<div style={{gridColumn:'1/-1'}}><span className="text-muted">Ausstattung:</span> {features.join(', ')}</div>}
           </div>
           {p.description&&<div className="text-sm" style={{marginTop:12,color:'var(--text2)',lineHeight:1.6}}>{p.description}</div>}
         </div>
-        {(p.cold_rent>0||p.status==='vermietet')&&<div className="card" style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)',marginBottom:10}}>Mietdaten</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,fontSize:13}}>
-            <div><span className="text-muted">Kaltmiete:</span> {fmt(p.cold_rent)}</div><div><span className="text-muted">NK:</span> {fmt(p.utilities)}</div>
-            <div><span className="text-muted">Gesamtmiete:</span> <strong style={{color:'var(--accent)',fontSize:16}}>{fmt(p.total_rent)}</strong></div><div><span className="text-muted">Kaution:</span> {fmt(p.deposit)}</div>
-            <div><span className="text-muted">Mietbeginn:</span> {fmtDate(p.rent_start)}</div><div><span className="text-muted">€/m²:</span> {p.area?(p.cold_rent/p.area).toFixed(2)+' €':'–'}</div>
-          </div>
-        </div>}
-        {tenant&&<div className="card" style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)',marginBottom:10}}>Mieter</div>
-          <div className="fw-600" style={{fontSize:16}}>{tenant.name}</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13,marginTop:8}}>
-            <div><span className="text-muted">Tel:</span> {tenant.phone}</div><div><span className="text-muted">E-Mail:</span> {tenant.email}</div>
-            <div><span className="text-muted">Einzug:</span> {fmtDate(tenant.move_in)}</div><div><span className="text-muted">Vertrag:</span> {tenant.contract}</div>
-          </div>
-        </div>}
-        {propDocs.length>0&&<div className="card" style={{padding:'8px 0'}}>
-          <div style={{padding:'8px 16px',fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)'}}>Dokumente ({propDocs.length})</div>
-          {propDocs.slice(0,5).map(d=><div key={d.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10,fontSize:13}}><span className="fw-600" style={{flex:1}}>{d.name||d.email_subject||'–'}</span><span className="badge badge-blue" style={{fontSize:10}}>{d.category}</span><span className="text-xs text-muted">{fmtDate(d.date)}</span></div>)}
-        </div>}
+        {p.cold_rent>0&&<div className="card" style={{marginBottom:16}}><div style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)',marginBottom:10}}>Mietdaten</div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,fontSize:13}}><div><span className="text-muted">Kaltmiete:</span> {fmt(p.cold_rent)}</div><div><span className="text-muted">NK:</span> {fmt(p.utilities)}</div><div><span className="text-muted">Gesamt:</span> <strong style={{color:'var(--accent)',fontSize:16}}>{fmt(p.total_rent)}</strong></div><div><span className="text-muted">Kaution:</span> {fmt(p.deposit)}</div><div><span className="text-muted">Mietbeginn:</span> {fmtDate(p.rent_start)}</div><div><span className="text-muted">€/m²:</span> {pricePerSqm.toFixed(2)} €</div></div></div>}
+        {tenant&&<div className="card" style={{marginBottom:16}}><div style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)',marginBottom:10}}>Mieter</div><div className="fw-600" style={{fontSize:16}}>{tenant.name}</div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13,marginTop:8}}><div><span className="text-muted">Tel:</span> {tenant.phone}</div><div><span className="text-muted">Mail:</span> {tenant.email}</div><div><span className="text-muted">Einzug:</span> {fmtDate(tenant.move_in)}</div><div><span className="text-muted">Vertrag:</span> {tenant.contract}</div></div></div>}
       </div>
       <div>
-        <div className="card" style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)',marginBottom:10}}>Finanzdaten</div>
-          <div style={{display:'grid',gap:10,fontSize:13}}>
-            <div><span className="text-muted">Marktwert:</span> <strong style={{fontSize:18,color:'var(--accent)'}}>{fmt(p.market_value)}</strong></div>
-            <div><span className="text-muted">Kaufpreis:</span> {fmt(p.purchase_price)}</div>
-            {p.market_value>0&&p.purchase_price>0&&<div><span className="text-muted">Wertsteigerung:</span> <strong style={{color:p.market_value>=p.purchase_price?'var(--accent)':'var(--red)'}}>{fmt(p.market_value-p.purchase_price)} ({((p.market_value-p.purchase_price)/p.purchase_price*100).toFixed(1)}%)</strong></div>}
-            <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}><span className="text-muted">Darlehen:</span> {fmt(p.loan_amount)}</div>
-            <div><span className="text-muted">Zins:</span> {p.loan_rate||0}%</div>
-            <div><span className="text-muted">Rate/M:</span> {fmt(p.loan_monthly_payment)}</div>
-            <div><span className="text-muted">Eigenkapital:</span> <strong style={{color:'var(--accent)'}}>{fmt((p.market_value||0)-(p.loan_amount||0))}</strong></div>
-            <div style={{borderTop:'1px solid var(--border)',paddingTop:10}}><span className="text-muted">Rücklage/M:</span> {fmt(p.maintenance_reserve)}</div>
-            <div><span className="text-muted">Rücklage ges.:</span> {fmt(p.maintenance_reserve_total)}</div>
-          </div>
-        </div>
-        {propCosts.length>0&&<div className="card" style={{padding:'8px 0',marginBottom:16}}>
-          <div style={{padding:'8px 16px',fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)'}}>Letzte Kosten</div>
-          {propCosts.slice(0,5).map(c=><div key={c.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',fontSize:13}}><div><span className="badge badge-gray" style={{fontSize:10}}>{c.category}</span> <span className="text-muted">{fmtDate(c.date)}</span></div><strong>{fmt(c.amount)}</strong></div>)}
-        </div>}
+        <div className="card" style={{marginBottom:16}}><div style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)',marginBottom:10}}>Finanzen</div><div style={{display:'grid',gap:8,fontSize:13}}>
+          <div><span className="text-muted">Marktwert:</span> <strong style={{fontSize:18,color:'var(--accent)'}}>{fmt(p.market_value)}</strong></div>
+          <div><span className="text-muted">Kaufpreis:</span> {fmt(p.purchase_price)}</div>
+          {p.market_value>0&&p.purchase_price>0&&<div><span className="text-muted">Wertentwicklung:</span> <strong style={{color:p.market_value>=p.purchase_price?'var(--accent)':'var(--red)'}}>{fmt(p.market_value-p.purchase_price)} ({((p.market_value-p.purchase_price)/p.purchase_price*100).toFixed(1)}%)</strong></div>}
+          <div style={{borderTop:'1px solid var(--border)',paddingTop:8}}><span className="text-muted">Darlehen:</span> {fmt(p.loan_amount)} · {p.loan_rate}%</div>
+          <div><span className="text-muted">Rate:</span> {fmt(p.loan_monthly_payment)}/M</div>
+          <div><span className="text-muted">EK:</span> <strong style={{color:'var(--accent)'}}>{fmt((p.market_value||0)-(p.loan_amount||0))}</strong></div>
+          <div style={{borderTop:'1px solid var(--border)',paddingTop:8}}><span className="text-muted">Rücklage:</span> {fmt(p.maintenance_reserve)}/M · Ges: {fmt(p.maintenance_reserve_total)}</div>
+        </div></div>
+        {propCosts.length>0&&<div className="card" style={{padding:'8px 0'}}><div style={{padding:'8px 16px',fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)'}}>Kosten</div>{propCosts.slice(0,4).map(c=><div key={c.id} style={{padding:'6px 16px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',fontSize:12}}><div><span className="badge badge-gray" style={{fontSize:10}}>{c.category}</span> {fmtDate(c.date)}</div><strong>{fmt(c.amount)}</strong></div>)}</div>}
       </div>
+    </div>}
+
+    {tab==='mieter'&&<div style={{maxWidth:600}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:16}}><div className="text-sm text-muted">Mieterverwaltung & Historie</div><button className="btn btn-primary btn-sm" onClick={()=>{setTf({name:'',phone:'',email:'',move_in:'',deposit:'',contract:'Unbefristet',notes:''});setTenantModal('new');}}>+ Mieter</button></div>
+      {allTenants.length===0&&<div className="empty"><p>Kein Mieter hinterlegt.</p></div>}
+      {allTenants.map((t,i)=><div key={t.id} className="card" style={{marginBottom:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}><div><strong>{t.name}</strong>{i===0&&<span className="badge badge-green" style={{marginLeft:8,fontSize:10}}>Aktuell</span>}{i>0&&<span className="badge badge-gray" style={{marginLeft:8,fontSize:10}}>Vormieter</span>}</div><div style={{display:'flex',gap:4}}><button className="btn-ghost btn-sm" onClick={()=>{setTf({...t,deposit:t.deposit||'',notes:t.notes||''});setTenantModal('edit');}}>✏️</button><button className="btn-ghost btn-sm" onClick={()=>delTenant(t.id)}>🗑️</button></div></div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13}}><div><span className="text-muted">Tel:</span> {t.phone||'–'}</div><div><span className="text-muted">Mail:</span> {t.email||'–'}</div><div><span className="text-muted">Einzug:</span> {fmtDate(t.move_in)}</div><div><span className="text-muted">Kaution:</span> {fmt(t.deposit)}</div></div>
+        {t.notes&&<div className="text-xs text-muted" style={{marginTop:6}}>{t.notes}</div>}
+      </div>)}
+      {tenantModal&&<Modal title={tenantModal==='new'?'Neuer Mieter':'Bearbeiten'} onClose={()=>setTenantModal(null)} footer={<><button className="btn btn-secondary" onClick={()=>setTenantModal(null)}>Abbrechen</button><button className="btn btn-primary" onClick={saveTenant}>Speichern</button></>}>
+        <Field label="Name"><input value={tf.name} onChange={e=>setTf(f=>({...f,name:e.target.value}))}/></Field>
+        <div className="form-row"><Field label="Telefon"><input value={tf.phone} onChange={e=>setTf(f=>({...f,phone:e.target.value}))}/></Field><Field label="E-Mail"><input value={tf.email} onChange={e=>setTf(f=>({...f,email:e.target.value}))}/></Field></div>
+        <div className="form-row"><Field label="Einzug"><input type="date" value={tf.move_in} onChange={e=>setTf(f=>({...f,move_in:e.target.value}))}/></Field><Field label="Kaution"><input type="number" value={tf.deposit} onChange={e=>setTf(f=>({...f,deposit:e.target.value}))}/></Field></div>
+        <Field label="Vertrag"><select value={tf.contract} onChange={e=>setTf(f=>({...f,contract:e.target.value}))}><option>Unbefristet</option><option>Befristet</option></select></Field>
+        <Field label="Notizen"><textarea value={tf.notes} onChange={e=>setTf(f=>({...f,notes:e.target.value}))} placeholder="Auszug, Kautionsrückgabe..."/></Field>
+      </Modal>}
     </div>}
 
     {tab==='rendite'&&<div style={{maxWidth:550}}>
       <div className="stat-grid">
-        <div className="stat-card"><div className="label">Brutto-Rendite</div><div className="value" style={{color:'var(--accent)'}}>{bruttoR.toFixed(2)}%</div><div className="sub">Kaltmiete / Kaufpreis</div></div>
-        <div className="stat-card"><div className="label">Netto-Rendite</div><div className="value" style={{color:nettoR>=0?'var(--accent)':'var(--red)'}}>{nettoR.toFixed(2)}%</div><div className="sub">nach Rücklage & Rate</div></div>
-        <div className="stat-card"><div className="label">Markt-Rendite</div><div className="value">{marketR.toFixed(2)}%</div><div className="sub">Kaltmiete / Marktwert</div></div>
-        <div className="stat-card"><div className="label">Monatl. Cashflow</div><div className="value" style={{color:monthlyCF>=0?'var(--accent)':'var(--red)'}}>{fmt(monthlyCF)}</div><div className="sub">Miete – Rate – Rücklage</div></div>
+        <div className="stat-card"><div className="label">Brutto</div><div className="value" style={{color:'var(--accent)'}}>{bruttoR.toFixed(2)}%</div></div>
+        <div className="stat-card"><div className="label">Netto</div><div className="value" style={{color:nettoR>=0?'var(--accent)':'var(--red)'}}>{nettoR.toFixed(2)}%</div></div>
+        <div className="stat-card"><div className="label">Marktwert-R.</div><div className="value">{marketR.toFixed(2)}%</div></div>
+        <div className="stat-card"><div className="label">CF/Monat</div><div className="value" style={{color:monthlyCF>=0?'var(--accent)':'var(--red)'}}>{fmt(monthlyCF)}</div></div>
       </div>
       <div className="card"><table style={{width:'100%',fontSize:13,borderCollapse:'collapse'}}><tbody>
-        <tr><td style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>Jahres-Kaltmiete</td><td style={{textAlign:'right',padding:'8px 0',borderBottom:'1px solid var(--border)',fontWeight:600}}>{fmt(annualRent)}</td></tr>
-        <tr><td style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>Rücklage / Jahr</td><td style={{textAlign:'right',padding:'8px 0',borderBottom:'1px solid var(--border)',fontWeight:600}}>−{fmt(annualCosts)}</td></tr>
-        <tr><td style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>Darlehensrate / Jahr</td><td style={{textAlign:'right',padding:'8px 0',borderBottom:'1px solid var(--border)',fontWeight:600}}>−{fmt(annualLoan)}</td></tr>
-        <tr><td style={{padding:'8px 0',fontWeight:700}}>Netto-Cashflow / Jahr</td><td style={{textAlign:'right',padding:'8px 0',fontWeight:700,color:annualRent-annualCosts-annualLoan>=0?'var(--accent)':'var(--red)'}}>{fmt(annualRent-annualCosts-annualLoan)}</td></tr>
+        <tr><td style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>Jahres-Kaltmiete</td><td style={{textAlign:'right',fontWeight:600,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>{fmt(annualRent)}</td></tr>
+        <tr><td style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>Rücklage/J</td><td style={{textAlign:'right',fontWeight:600,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>−{fmt(annualCosts)}</td></tr>
+        <tr><td style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>Darlehen/J</td><td style={{textAlign:'right',fontWeight:600,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>−{fmt(annualLoan)}</td></tr>
+        <tr><td style={{padding:'8px 0',fontWeight:700}}>Netto-CF/J</td><td style={{textAlign:'right',fontWeight:700,color:annualRent-annualCosts-annualLoan>=0?'var(--accent)':'var(--red)',padding:'8px 0'}}>{fmt(annualRent-annualCosts-annualLoan)}</td></tr>
       </tbody></table></div>
     </div>}
 
     {tab==='cashflow'&&<div>
-      <div className="text-sm text-muted" style={{marginBottom:16}}>10-Jahres-Projektion (1,5% jährl. Mietsteigerung)</div>
+      <div className="text-sm text-muted" style={{marginBottom:16}}>10-Jahres-Projektion (1,5%/J Mietsteigerung)</div>
       <div className="card" style={{padding:0,overflow:'auto'}}><table style={{width:'100%',fontSize:13,borderCollapse:'collapse'}}>
-        <thead><tr>{['Jahr','Einnahmen','Rücklage','Darlehen','Netto-CF',''].map((h,i)=><th key={i} style={{textAlign:'left',padding:'10px 14px',fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,color:'var(--text2)',borderBottom:'2px solid var(--border)'}}>{h}</th>)}</tr></thead>
-        <tbody>{projection.map(r=><tr key={r.year}><td style={{padding:'10px 14px',borderBottom:'1px solid var(--border)',fontWeight:600}}>{r.year}</td><td style={{padding:'10px 14px',borderBottom:'1px solid var(--border)'}}>{fmt(r.income)}</td><td style={{padding:'10px 14px',borderBottom:'1px solid var(--border)'}}>{fmt(r.reserve)}</td><td style={{padding:'10px 14px',borderBottom:'1px solid var(--border)'}}>{fmt(r.loan)}</td><td style={{padding:'10px 14px',borderBottom:'1px solid var(--border)',fontWeight:700,color:r.netCF>=0?'var(--accent)':'var(--red)'}}>{fmt(r.netCF)}</td><td style={{padding:'10px 14px',borderBottom:'1px solid var(--border)',width:150}}><div style={{height:8,borderRadius:4,background:r.netCF>=0?'var(--accent)':'var(--red)',width:`${Math.max(Math.abs(r.netCF)/maxCF*100,4)}%`}}/></td></tr>)}
-        <tr><td style={{padding:'10px 14px',fontWeight:700}}>Σ 10 Jahre</td><td style={{padding:'10px 14px',fontWeight:700}}>{fmt(projection.reduce((s,r)=>s+r.income,0))}</td><td style={{padding:'10px 14px',fontWeight:700}}>{fmt(projection.reduce((s,r)=>s+r.reserve,0))}</td><td style={{padding:'10px 14px',fontWeight:700}}>{fmt(projection.reduce((s,r)=>s+r.loan,0))}</td><td style={{padding:'10px 14px',fontWeight:700,color:'var(--accent)'}}>{fmt(projection.reduce((s,r)=>s+r.netCF,0))}</td><td/></tr>
+        <thead><tr>{['Jahr','Einnahmen','Rücklage','Darlehen','Netto-CF',''].map((h,i)=><th key={i} style={{textAlign:'left',padding:'10px 14px',fontSize:11,fontWeight:600,textTransform:'uppercase',color:'var(--text2)',borderBottom:'2px solid var(--border)'}}>{h}</th>)}</tr></thead>
+        <tbody>{projection.map(r=><tr key={r.year}><td style={{padding:'8px 14px',borderBottom:'1px solid var(--border)',fontWeight:600}}>{r.year}</td><td style={{padding:'8px 14px',borderBottom:'1px solid var(--border)'}}>{fmt(r.income)}</td><td style={{padding:'8px 14px',borderBottom:'1px solid var(--border)'}}>{fmt(r.reserve)}</td><td style={{padding:'8px 14px',borderBottom:'1px solid var(--border)'}}>{fmt(r.loan)}</td><td style={{padding:'8px 14px',borderBottom:'1px solid var(--border)',fontWeight:700,color:r.netCF>=0?'var(--accent)':'var(--red)'}}>{fmt(r.netCF)}</td><td style={{padding:'8px 14px',borderBottom:'1px solid var(--border)',width:120}}><div style={{height:8,borderRadius:4,background:r.netCF>=0?'var(--accent)':'var(--red)',width:`${Math.max(Math.abs(r.netCF)/maxCF*100,4)}%`}}/></td></tr>)}
+        <tr><td style={{padding:'8px 14px',fontWeight:700}}>Σ 10J</td><td style={{padding:'8px 14px',fontWeight:700}}>{fmt(projection.reduce((s,r)=>s+r.income,0))}</td><td style={{padding:'8px 14px',fontWeight:700}}>{fmt(projection.reduce((s,r)=>s+r.reserve,0))}</td><td style={{padding:'8px 14px',fontWeight:700}}>{fmt(projection.reduce((s,r)=>s+r.loan,0))}</td><td style={{padding:'8px 14px',fontWeight:700,color:'var(--accent)'}}>{fmt(projection.reduce((s,r)=>s+r.netCF,0))}</td><td/></tr>
         </tbody></table></div>
     </div>}
 
+    {tab==='mietanpassung'&&<div style={{maxWidth:600}}>
+      <div className="text-sm text-muted" style={{marginBottom:16}}>Mietanpassung nach §558 BGB</div>
+      <div className="stat-grid">
+        <div className="stat-card"><div className="label">Kaltmiete</div><div className="value">{fmt(p.cold_rent)}</div><div className="sub">{pricePerSqm.toFixed(2)} €/m²</div></div>
+        <div className="stat-card"><div className="label">Letzte Anpassung</div><div className="value" style={{fontSize:16}}>{lastIncrease?fmtDate(lastIncrease.date):'–'}</div><div className="sub">{monthsSince!==null?`vor ${monthsSince}M`:''}</div></div>
+        <div className="stat-card"><div className="label">Nächste möglich</div><div className="value" style={{color:nextAllowed===0?'var(--accent)':'var(--amber)',fontSize:16}}>{nextAllowed===0?'Jetzt':nextAllowed?`in ${nextAllowed}M`:'–'}</div><div className="sub">15M Sperrfrist</div></div>
+        <div className="stat-card"><div className="label">Kappung 20%</div><div className="value" style={{fontSize:16}}>{fmt(p.cold_rent*1.2)}</div><div className="sub">Max in 3 Jahren</div></div>
+      </div>
+      <div className="card">
+        <div className="fw-600" style={{marginBottom:12}}>Rechner</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,fontSize:13}}>
+          <div style={{padding:12,background:'var(--surface2)',borderRadius:8}}><div className="text-xs text-muted">+10% (Mietspiegel)</div><div className="fw-600" style={{fontSize:18}}>{fmt(p.cold_rent*1.1)}</div><div className="text-xs text-muted">{p.area?((p.cold_rent*1.1)/p.area).toFixed(2):'-'} €/m² · +{fmt(p.cold_rent*0.1*12)}/J</div></div>
+          <div style={{padding:12,background:'var(--surface2)',borderRadius:8}}><div className="text-xs text-muted">+20% (Maximum)</div><div className="fw-600" style={{fontSize:18}}>{fmt(p.cold_rent*1.2)}</div><div className="text-xs text-muted">{p.area?((p.cold_rent*1.2)/p.area).toFixed(2):'-'} €/m² · +{fmt(p.cold_rent*0.2*12)}/J</div></div>
+        </div>
+        <div className="text-xs text-muted" style={{marginTop:12,lineHeight:1.6}}><strong>§558 BGB:</strong> Frühestens 15 Monate nach letzter Erhöhung. Max 20% in 3 Jahren (teils 15%). Begründung: Mietspiegel/Gutachten. Zustimmungsfrist: 2 Monate.</div>
+      </div>
+    </div>}
+
+    {tab==='nkabrechnung'&&<div style={{maxWidth:650}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:16}}><div className="text-sm text-muted">Nebenkostenabrechnung</div><select value={nkYear} onChange={e=>setNkYear(e.target.value)} style={{padding:'6px 12px',border:'1px solid var(--border)',borderRadius:8,background:'var(--surface)',color:'var(--text)',fontSize:13}}>{[2024,2025,2026].map(y=><option key={y}>{y}</option>)}</select></div>
+      {(()=>{const nka=genNk();return(<>
+        <div className="stat-grid">
+          <div className="stat-card"><div className="label">Vorauszahlung</div><div className="value">{fmt(nka.vz)}</div><div className="sub">{fmt(p.utilities)}/M × 12</div></div>
+          <div className="stat-card"><div className="label">Tatsächliche Kosten</div><div className="value">{fmt(nka.tot)}</div><div className="sub">{nka.um.length} Positionen</div></div>
+          <div className="stat-card"><div className="label">{nka.diff>=0?'Guthaben':'Nachzahlung'}</div><div className="value" style={{color:nka.diff>=0?'var(--accent)':'var(--red)'}}>{fmt(Math.abs(nka.diff))}</div></div>
+        </div>
+        <div className="card" style={{marginBottom:16}}>
+          <div className="fw-600" style={{marginBottom:12}}>Umlagefähige Kosten {nkYear}</div>
+          {nka.um.length===0?<div className="text-sm text-muted">Keine Kosten für {nkYear}. Erfasse Kosten unter "Kosten".</div>:
+          <table style={{width:'100%',fontSize:13,borderCollapse:'collapse'}}><tbody>
+            {nka.um.map(c=><tr key={c.id}><td style={{padding:'6px 0',borderBottom:'1px solid var(--border)'}}>{fmtDate(c.date)}</td><td style={{borderBottom:'1px solid var(--border)'}}><span className="badge badge-gray" style={{fontSize:10}}>{c.category}</span></td><td style={{borderBottom:'1px solid var(--border)'}}>{c.notes}</td><td style={{textAlign:'right',fontWeight:600,borderBottom:'1px solid var(--border)'}}>{fmt(c.amount)}</td></tr>)}
+            <tr><td colSpan={3} style={{fontWeight:700,paddingTop:8}}>Gesamt</td><td style={{textAlign:'right',fontWeight:700,paddingTop:8}}>{fmt(nka.tot)}</td></tr>
+            <tr><td colSpan={3} style={{color:'var(--text2)'}}>Vorauszahlung</td><td style={{textAlign:'right'}}>−{fmt(nka.vz)}</td></tr>
+            <tr><td colSpan={3} style={{fontWeight:700,borderTop:'2px solid var(--border)',paddingTop:8}}>{nka.diff>=0?'Guthaben':'Nachzahlung'}</td><td style={{textAlign:'right',fontWeight:700,borderTop:'2px solid var(--border)',paddingTop:8,color:nka.diff>=0?'var(--accent)':'var(--red)'}}>{fmt(Math.abs(nka.diff))}</td></tr>
+          </tbody></table>}
+        </div>
+        <button className="btn btn-primary" onClick={()=>{cp(`NK-ABRECHNUNG ${nkYear}\n${p.name} · ${tenant?.name||'–'}\n${'═'.repeat(40)}\n\nKosten:\n${nka.um.map(c=>`${fmtDate(c.date)} | ${c.category} | ${fmt(c.amount)}`).join('\n')}\n\nGesamt: ${fmt(nka.tot)}\nVorauszahlung: ${fmt(nka.vz)}\n${nka.diff>=0?'GUTHABEN':'NACHZAHLUNG'}: ${fmt(Math.abs(nka.diff))}`)}}>📋 Kopieren</button>
+      </>);})()}
+    </div>}
+
     {tab==='nk'&&<div style={{maxWidth:500}}>
-      <div className="text-sm text-muted" style={{marginBottom:16}}>Monatliche Nebenkostenaufschlüsselung</div>
       <div className="card"><table style={{width:'100%',fontSize:13,borderCollapse:'collapse'}}><tbody>
-        {Object.entries(NK_LABELS).map(([k,l])=><tr key={k}><td style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>{l}</td><td style={{textAlign:'right',padding:'8px 0',borderBottom:'1px solid var(--border)',fontWeight:600}}>{fmt(nk[k]||0)}</td></tr>)}
-        <tr><td style={{padding:'8px 0',fontWeight:700}}>Gesamt</td><td style={{textAlign:'right',padding:'8px 0',fontWeight:700}}>{fmt(nkTotal)}</td></tr>
+        {Object.entries(NK_LABELS).map(([k,l])=><tr key={k}><td style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>{l}</td><td style={{textAlign:'right',fontWeight:600,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>{fmt(nk[k]||0)}</td></tr>)}
+        <tr><td style={{fontWeight:700,paddingTop:8}}>Gesamt</td><td style={{textAlign:'right',fontWeight:700,paddingTop:8}}>{fmt(nkTotal)}</td></tr>
       </tbody></table></div>
-      {p.utilities>0&&<div className="text-sm text-muted" style={{marginTop:12}}>Vorauszahlung lt. Vertrag: <strong>{fmt(p.utilities)}</strong> — Differenz: <strong style={{color:p.utilities>=nkTotal?'var(--accent)':'var(--red)'}}>{fmt(p.utilities-nkTotal)}</strong></div>}
+      {p.utilities>0&&<div className="text-sm text-muted" style={{marginTop:12}}>Vorauszahlung: {fmt(p.utilities)} · Diff: <strong style={{color:p.utilities>=nkTotal?'var(--accent)':'var(--red)'}}>{fmt(p.utilities-nkTotal)}</strong></div>}
     </div>}
 
     {tab==='scout'&&<div>
-      <div className="text-sm text-muted" style={{marginBottom:16}}>Generiere ein ImmoScout24-Inserat mit allen Objektdaten.</div>
-      {!scoutText?<button className="btn btn-primary" onClick={genScout}>🌐 ImmoScout24-Inserat generieren</button>:<div>
-        <div style={{display:'flex',gap:8,marginBottom:16}}><button className="btn btn-primary" onClick={()=>copyText(scoutText)}>📋 In Zwischenablage</button><button className="btn btn-secondary" onClick={genScout}>🔄 Neu generieren</button></div>
+      {!scoutText?<button className="btn btn-primary" onClick={genScout}>🌐 ImmoScout-Inserat generieren</button>:<div>
+        <div style={{display:'flex',gap:8,marginBottom:16}}><button className="btn btn-primary" onClick={()=>cp(scoutText)}>📋 Kopieren</button><button className="btn btn-secondary" onClick={genScout}>🔄 Neu</button></div>
         <div style={{background:'var(--surface2)',borderRadius:10,padding:16,fontSize:13,lineHeight:1.7,whiteSpace:'pre-wrap',maxHeight:500,overflow:'auto'}}>{scoutText}</div>
       </div>}
     </div>}
   </div>);
 }
-
 // ══════ EINNAHMEN (mit Auto-Vorausfüllung) ══════
 function PaymentsPage({data,user,reload}){
   const [modal,setModal]=useState(null);const [form,setForm]=useState({});const [tab,setTab]=useState('monthly');const [generating,setGenerating]=useState(false);
@@ -460,20 +476,80 @@ function DocumentsPage({data,user,reload}){
   </div>);
 }
 
-// ══════ EINSTELLUNGEN ══════
+// ══════ EINSTELLUNGEN (mit Steuerexport) ══════
 function SettingsPage({user,theme,setTheme,household,members,inviteEmail,setInviteEmail,inviteMsg,inviteMember,data}){
+  const [steuerYear,setSteuerYear]=useState('2025');
   const exportCSV=()=>{const rows=[['Immobilie','Adresse','Status','Fläche','Kaltmiete','Gesamtmiete','Marktwert','Darlehen']];data.properties.forEach(p=>rows.push([p.name,p.address,p.status,p.area,p.cold_rent,p.total_rent,p.market_value,p.loan_amount]));const csv=rows.map(r=>r.map(c=>`"${c}"`).join(';')).join('\n');const b=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`cahomes_export_${td()}.csv`;a.click();};
   const exportJSON=()=>{const b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`cahomes_backup_${td()}.json`;a.click();};
+
+  const generateAnlageV=()=>{
+    const rented=data.properties.filter(p=>p.status==='vermietet');
+    let text=`ANLAGE V – Einkünfte aus Vermietung und Verpachtung ${steuerYear}\n${'═'.repeat(60)}\nErstellt: ${new Date().toLocaleDateString('de-DE')}\n\n`;
+    let totalEinnahmen=0,totalWerbungskosten=0;
+
+    rented.forEach((p,i)=>{
+      const yearPayments=data.payments.filter(pay=>pay.property_id===p.id&&(pay.month||'').startsWith(steuerYear));
+      const yearCosts=data.costs.filter(c=>c.property_id===p.id&&(c.date||'').startsWith(steuerYear));
+      const einnahmen=yearPayments.reduce((s,pay)=>s+(pay.received||0),0);
+      const werbungskosten=yearCosts.reduce((s,c)=>s+(c.amount||0),0);
+      const zinsen=(p.loan_amount||0)*(p.loan_rate||0)/100;
+      const afa=p.year<1925?((p.purchase_price||0)*0.025):((p.purchase_price||0)*0.02);
+      const totalWK=werbungskosten+zinsen+afa;
+
+      totalEinnahmen+=einnahmen;totalWerbungskosten+=totalWK;
+
+      text+=`${'─'.repeat(60)}\nOBJEKT ${i+1}: ${p.name}\n${p.address}\n${'─'.repeat(60)}\n\n`;
+      text+=`EINNAHMEN (Zeile 9-13):\n`;
+      text+=`  Mieteinnahmen ${steuerYear}:     ${fmt(einnahmen)}\n`;
+      text+=`  (${yearPayments.length} Monate erfasst)\n\n`;
+      text+=`WERBUNGSKOSTEN (Zeile 33-50):\n`;
+      text+=`  Schuldzinsen (Z.37):          ${fmt(zinsen)}\n`;
+      text+=`  AfA ${p.year<1925?'2,5%':'2,0%'} (Z.33):             ${fmt(afa)}\n`;
+
+      const grouped={};yearCosts.forEach(c=>{grouped[c.category]=(grouped[c.category]||0)+(c.amount||0);});
+      Object.entries(grouped).forEach(([cat,amt])=>{
+        const zeile=cat==='Reparatur'?'Z.39':cat==='Versicherung'?'Z.46':cat==='Hausgeld'?'Z.47':cat==='Verwaltung'?'Z.48':'Z.50';
+        text+=`  ${cat} (${zeile}):${' '.repeat(Math.max(1,24-cat.length-zeile.length))}${fmt(amt)}\n`;
+      });
+      text+=`  ${'─'.repeat(40)}\n`;
+      text+=`  Summe Werbungskosten:         ${fmt(totalWK)}\n\n`;
+      text+=`ERGEBNIS:\n`;
+      text+=`  Einkünfte aus V+V:            ${fmt(einnahmen-totalWK)}\n\n`;
+    });
+
+    text+=`${'═'.repeat(60)}\nZUSAMMENFASSUNG ALLE OBJEKTE\n${'═'.repeat(60)}\n`;
+    text+=`Gesamteinnahmen:                ${fmt(totalEinnahmen)}\n`;
+    text+=`Gesamte Werbungskosten:         ${fmt(totalWerbungskosten)}\n`;
+    text+=`${'─'.repeat(40)}\n`;
+    text+=`Einkünfte aus V+V gesamt:       ${fmt(totalEinnahmen-totalWerbungskosten)}\n\n`;
+    text+=`HINWEIS: Diese Aufstellung dient als Hilfe für Ihre Steuererklärung.\nBitte prüfen Sie die Werte mit Ihrem Steuerberater.\nAfA-Berechnung: ${steuerYear<'1925'?'2,5%':'2,0%'} auf Gebäudeanteil des Kaufpreises (ohne Grundstück).\n`;
+
+    return text;
+  };
+
+  const cp=(t)=>{navigator.clipboard?.writeText(t).then(()=>alert('Kopiert!')).catch(()=>{});};
+
   return(<div>
     <div className="page-header"><div><h2>Einstellungen</h2></div></div>
-    <div style={{display:'grid',gap:16,maxWidth:550}}>
-      <div className="card"><div className="fw-600 mb-2">👥 Haushalt</div><div className="text-sm text-muted" style={{marginBottom:12}}>Teile dein Portfolio mit Partnern.</div>
+    <div style={{display:'grid',gap:16,maxWidth:600}}>
+      <div className="card"><div className="fw-600 mb-2">👥 Haushalt</div><div className="text-sm text-muted" style={{marginBottom:12}}>Portfolio mit Partnern teilen.</div>
         {household&&<div className="text-sm" style={{marginBottom:12}}>Haushalt: <strong>{household.name}</strong></div>}
         {members.map(m=><div key={m.id} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:13}}><span>{m.invited_email||user.email}</span><div style={{display:'flex',gap:8}}><span className={`badge ${m.status==='active'?'badge-green':'badge-amber'}`}>{m.status==='active'?'Aktiv':'Eingeladen'}</span><span className="badge badge-gray">{m.role==='owner'?'Admin':'Mitglied'}</span></div></div>)}
         <div style={{background:'var(--surface2)',borderRadius:10,padding:16,marginTop:12}}><div className="fw-600 text-sm" style={{marginBottom:8}}>Einladen</div><div style={{display:'flex',gap:8}}><input type="email" placeholder="E-Mail" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} style={{flex:1,padding:'8px 12px',border:'1px solid var(--border)',borderRadius:8,background:'var(--input-bg)',color:'var(--text)',outline:'none',fontSize:13}}/><button className="btn btn-primary btn-sm" onClick={inviteMember}>Einladen</button></div>{inviteMsg&&<div className="text-sm" style={{marginTop:8,color:inviteMsg.startsWith('Fehler')?'var(--red)':'var(--accent)'}}>{inviteMsg}</div>}</div>
       </div>
+
+      <div className="card">
+        <div className="fw-600 mb-2">📋 Steuerexport (Anlage V)</div>
+        <div className="text-sm text-muted" style={{marginBottom:12}}>Erstellt eine Aufstellung aller Mieteinnahmen und Werbungskosten für die Steuererklärung — aufgeschlüsselt nach Objekten mit AfA, Schuldzinsen und Kostenarten.</div>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <select value={steuerYear} onChange={e=>setSteuerYear(e.target.value)} style={{padding:'8px 12px',border:'1px solid var(--border)',borderRadius:8,background:'var(--surface)',color:'var(--text)',fontSize:13}}>{[2024,2025,2026].map(y=><option key={y}>{y}</option>)}</select>
+          <button className="btn btn-primary" onClick={()=>{const t=generateAnlageV();const w=window.open('','_blank');w.document.write(`<pre style="font-family:monospace;padding:24px;font-size:13px">${t}</pre><script>window.print()<\/script>`);w.document.close();}}>🖨️ PDF drucken</button>
+          <button className="btn btn-secondary" onClick={()=>cp(generateAnlageV())}>📋 Kopieren</button>
+        </div>
+      </div>
+
       <div className="card"><div className="fw-600 mb-2">🎨 Darstellung</div><button className="btn btn-secondary" onClick={()=>setTheme(t=>t==='light'?'dark':'light')}>{theme==='dark'?'☀️ Hellmodus':'🌙 Dunkelmodus'}</button></div>
-      <div className="card"><div className="fw-600 mb-2">📥 Export</div><div className="text-sm text-muted" style={{marginBottom:12}}>Daten herunterladen</div><div style={{display:'flex',gap:8}}><button className="btn btn-primary btn-sm" onClick={exportCSV}>📊 CSV / Excel</button><button className="btn btn-secondary btn-sm" onClick={exportJSON}>💾 JSON Backup</button></div></div>
+      <div className="card"><div className="fw-600 mb-2">📥 Export</div><div className="text-sm text-muted" style={{marginBottom:12}}>Daten herunterladen</div><div style={{display:'flex',gap:8}}><button className="btn btn-primary btn-sm" onClick={exportCSV}>📊 CSV</button><button className="btn btn-secondary btn-sm" onClick={exportJSON}>💾 JSON Backup</button></div></div>
       <div className="card"><div className="fw-600 mb-2">👤 Account</div><div className="text-sm text-muted mb-2">{user.email}</div><button className="btn btn-secondary" onClick={()=>supabase.auth.signOut()}>🚪 Abmelden</button></div>
     </div>
   </div>);
