@@ -60,7 +60,7 @@ export default function Home(){
     <div className="app">
       {sidebarOpen&&<div className="overlay" onClick={()=>setSidebarOpen(false)}/>}
       <aside className={`sidebar${sidebarOpen?' open':''}`}>
-        <div className="sidebar-brand"><h1 style={{fontFamily:'Instrument Serif,Georgia,serif',fontSize:22,fontWeight:400,color:'#fff'}}>CA Homes</h1><p style={{fontSize:11,color:'rgba(255,255,255,0.4)',letterSpacing:1,textTransform:'uppercase',marginTop:2}}>Property Management</p></div>
+        <div className="sidebar-brand"><div style={{display:'flex',alignItems:'center',gap:12,marginBottom:4}}><img src="/logo.png" alt="CA Homes" style={{width:36,height:36,borderRadius:8,background:'#F7F5F2',objectFit:'contain',padding:2}}/><div><h1 style={{fontFamily:'Instrument Serif,Georgia,serif',fontSize:20,fontWeight:400,color:'#fff',lineHeight:1}}>CA Homes</h1><p style={{fontSize:10,color:'rgba(255,255,255,0.4)',letterSpacing:1,textTransform:'uppercase',marginTop:2}}>Property Management</p></div></div></div>{{fontFamily:'Instrument Serif,Georgia,serif',fontSize:22,fontWeight:400,color:'#fff'}}>CA Homes</h1><p style={{fontSize:11,color:'rgba(255,255,255,0.4)',letterSpacing:1,textTransform:'uppercase',marginTop:2}}>Property Management</p></div>
         <nav className="sidebar-nav">
           {[{id:'dashboard',l:'🏠  Dashboard'},{id:'properties',l:'🏢  Immobilien'},{id:'payments',l:'💶  Einnahmen'},{id:'costs',l:'💳  Kosten'},{id:'vorgaenge',l:'🔧  Vorgänge'},{id:'documents',l:'📁  Dokumente'},{id:'settings',l:'⚙️  Einstellungen'}].map(n=>(
             <button key={n.id} className={(page===n.id||(n.id==='properties'&&page.startsWith('detail:')))?'active':''} onClick={()=>nav(n.id)}>{n.l}</button>
