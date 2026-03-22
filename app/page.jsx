@@ -69,7 +69,7 @@ export default function Home(){
   );
 }
 
-// ══════ DASHBOARD ══════
+// ══════ DASHBOARD (mit 12-Monats-Verlauf) ══════
 function DashboardPage({data,setPage}){
   const rented=data.properties.filter(p=>p.status==='vermietet');
   const totalRent=rented.reduce((s,p)=>s+(p.total_rent||0),0);
@@ -77,6 +77,20 @@ function DashboardPage({data,setPage}){
   const totalLoan=data.properties.reduce((s,p)=>s+(p.loan_amount||0),0);
   const totalReserves=data.properties.reduce((s,p)=>s+(p.maintenance_reserve_total||0),0);
   const open=data.tickets.filter(t=>t.status==='offen').length+data.tasks.filter(t=>t.status==='offen').length;
+  const upcomingTasks=[...data.tasks].filter(t=>t.status==='offen').sort((a,b)=>(a.due||'').localeCompare(b.due||'')).slice(0,5);
+
+  // 12-Monats-Verlauf berechnen
+  const last12=useMemo(()=>{
+    const months=[];const now=new Date();
+    for(let i=11;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push(d.toISOString().slice(0,7));}
+    return months.map(m=>{
+      const income=data.payments.filter(p=>p.month===m).reduce((s,p)=>s+(p.received||0),0);
+      const costs=data.costs.filter(c=>(c.date||'').startsWith(m)).reduce((s,c)=>s+(c.amount||0),0);
+      return{month:m,label:new Date(m+'-01').toLocaleDateString('de-DE',{month:'short'}),income,costs,cashflow:income-costs};
+    });
+  },[data.payments,data.costs]);
+  const maxBar=Math.max(...last12.map(m=>Math.max(m.income,m.costs)),1);
+
   return(<div>
     <div className="page-header"><div><h2>Dashboard</h2><p>Übersicht deiner Immobilien</p></div></div>
     <div className="stat-grid">
@@ -86,13 +100,47 @@ function DashboardPage({data,setPage}){
       <div className="stat-card"><div className="label">Restdarlehen</div><div className="value" style={{color:'var(--red)'}}>{fmt(totalLoan)}</div><div className="sub">Rücklagen: {fmt(totalReserves)}</div></div>
       <div className="stat-card"><div className="label">Offene Vorgänge</div><div className="value" style={{color:open>0?'var(--amber)':'var(--accent)'}}>{open}</div></div>
     </div>
-    <div className="card-grid">{data.properties.map(p=>{const t=data.tenants.find(x=>x.property_id===p.id);return(<div key={p.id} className="card" style={{cursor:'pointer'}} onClick={()=>setPage('detail:'+p.id)}>
-      <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}><strong>{p.name}</strong><span className={`badge ${p.status==='vermietet'?'badge-green':'badge-gray'}`}>{p.status}</span></div>
-      <div className="text-sm text-muted">{p.address}</div>
-      {p.total_rent>0&&<div className="text-sm" style={{marginTop:8}}>Miete: <strong>{fmt(p.total_rent)}</strong></div>}
-      {t&&<div className="text-sm text-muted">Mieter: {t.name}</div>}
-      {p.market_value>0&&<div className="text-sm" style={{marginTop:4}}>Marktwert: <strong>{fmt(p.market_value)}</strong></div>}
-    </div>);})}</div>
+
+    {/* 12-Monats-Verlauf */}
+    <div className="card" style={{marginBottom:20}}>
+      <div style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)',marginBottom:16}}>12-Monats-Verlauf</div>
+      <div style={{display:'flex',alignItems:'flex-end',gap:6,height:140}}>
+        {last12.map((m,i)=><div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+          <div style={{width:'100%',display:'flex',gap:2,alignItems:'flex-end',height:100}}>
+            <div style={{flex:1,background:'var(--accent)',borderRadius:'3px 3px 0 0',height:`${Math.max((m.income/maxBar)*100,2)}%`,minHeight:2,transition:'height .3s'}} title={`Einnahmen: ${fmt(m.income)}`}/>
+            <div style={{flex:1,background:'var(--red)',borderRadius:'3px 3px 0 0',height:`${Math.max((m.costs/maxBar)*100,2)}%`,minHeight:2,transition:'height .3s',opacity:.7}} title={`Kosten: ${fmt(m.costs)}`}/>
+          </div>
+          <div style={{fontSize:10,color:'var(--text3)'}}>{m.label}</div>
+        </div>)}
+      </div>
+      <div style={{display:'flex',gap:16,marginTop:12,fontSize:12,color:'var(--text2)'}}>
+        <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:'var(--accent)'}}/> Einnahmen</span>
+        <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:'var(--red)',opacity:.7}}/> Kosten</span>
+        <span style={{marginLeft:'auto'}}>Cashflow letzte 12M: <strong style={{color:last12.reduce((s,m)=>s+m.cashflow,0)>=0?'var(--accent)':'var(--red)'}}>{fmt(last12.reduce((s,m)=>s+m.cashflow,0))}</strong></span>
+      </div>
+    </div>
+
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+      {/* Immobilien */}
+      <div>
+        <div style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)',marginBottom:10}}>Immobilien</div>
+        {data.properties.map(p=>{const t=data.tenants.find(x=>x.property_id===p.id);return(<div key={p.id} className="card" style={{cursor:'pointer',marginBottom:10,padding:14}} onClick={()=>setPage('detail:'+p.id)}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><strong style={{fontSize:14}}>{p.name}</strong><span className={`badge ${p.status==='vermietet'?'badge-green':'badge-gray'}`}>{p.status}</span></div>
+          <div className="text-xs text-muted">{p.address}</div>
+          {p.total_rent>0&&<div className="text-sm" style={{marginTop:6}}>Miete: <strong>{fmt(p.total_rent)}</strong></div>}
+          {t&&<div className="text-xs text-muted" style={{marginTop:2}}>Mieter: {t.name}</div>}
+        </div>);})}
+      </div>
+      {/* Aufgaben */}
+      <div>
+        <div style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--text2)',marginBottom:10}}>Nächste Aufgaben</div>
+        {upcomingTasks.map(t=>{const prop=t.property_id&&t.property_id!=='all'?data.properties.find(p=>p.id===t.property_id):null;return(<div key={t.id} className="card" style={{marginBottom:8,padding:12,cursor:'pointer'}} onClick={()=>setPage('vorgaenge')}>
+          <div className="fw-600 text-sm">{t.title}</div>
+          <div className="text-xs text-muted">{t.category}{prop?' · '+prop.name:''} · Fällig: {fmtDate(t.due)}</div>
+        </div>);})}
+        {upcomingTasks.length===0&&<div className="text-sm text-muted">Keine offenen Aufgaben</div>}
+      </div>
+    </div>
   </div>);
 }
 
@@ -285,26 +333,65 @@ function PropertyDetailPage({id,data,user,reload,setPage}){
   </div>);
 }
 
-// ══════ EINNAHMEN ══════
+// ══════ EINNAHMEN (mit Auto-Vorausfüllung) ══════
 function PaymentsPage({data,user,reload}){
-  const [modal,setModal]=useState(null);const [form,setForm]=useState({});const [tab,setTab]=useState('monthly');
+  const [modal,setModal]=useState(null);const [form,setForm]=useState({});const [tab,setTab]=useState('monthly');const [generating,setGenerating]=useState(false);
   const rented=data.properties.filter(p=>p.status==='vermietet');
   const save=async()=>{const row={...form,expected:Number(form.expected)||0,received:Number(form.received)||0};if(modal==='new'){delete row.id;row.user_id=user.id;await supabase.from('payments').insert(row);}else{const{id,user_id,created_at,household_id,...upd}=row;await supabase.from('payments').update(upd).eq('id',id);}await reload();setModal(null);};
   const months=[...new Set(data.payments.map(p=>p.month))].sort().reverse();
   const totalRec=data.payments.reduce((s,p)=>s+(p.received||0),0);const totalExp=data.payments.reduce((s,p)=>s+(p.expected||0),0);const totalCosts=data.costs.reduce((s,c)=>s+(c.amount||0),0);
+
+  // Auto-Generate: Erstellt Soll-Einträge für den aktuellen Monat basierend auf Immobiliendaten
+  const autoGenerate=async()=>{
+    const currentMonth=new Date().toISOString().slice(0,7);
+    setGenerating(true);
+    let count=0;
+    for(const p of rented){
+      const existing=data.payments.find(pay=>pay.property_id===p.id&&pay.month===currentMonth);
+      if(!existing&&p.total_rent>0){
+        await supabase.from('payments').insert({user_id:user.id,property_id:p.id,month:currentMonth,expected:p.total_rent,received:0,notes:'Automatisch erstellt'});
+        count++;
+      }
+    }
+    await reload();
+    setGenerating(false);
+    if(count>0)alert(`${count} Zahlungen für ${monthName(currentMonth)} erstellt!`);
+    else alert('Alle Zahlungen für diesen Monat existieren bereits.');
+  };
+
+  // Quick-Confirm: Markiere Zahlung als eingegangen (Ist = Soll)
+  const confirmPayment=async(p)=>{
+    const{id,user_id,created_at,household_id,...upd}=p;
+    await supabase.from('payments').update({...upd,received:p.expected,notes:p.notes?p.notes+' | Bestätigt':'Bestätigt'}).eq('id',id);
+    await reload();
+  };
+
   return(<div>
-    <div className="page-header"><div><h2>Einnahmen</h2></div><button className="btn btn-primary" onClick={()=>{setForm({property_id:rented[0]?.id||'',month:new Date().toISOString().slice(0,7),expected:'',received:'',notes:''});setModal('new');}}>+ Zahlung</button></div>
+    <div className="page-header"><div><h2>Einnahmen</h2></div>
+      <div style={{display:'flex',gap:8}}>
+        <button className="btn btn-secondary" onClick={autoGenerate} disabled={generating}>{generating?'⏳ Wird erstellt...':'⚡ Monat vorausfüllen'}</button>
+        <button className="btn btn-primary" onClick={()=>{const p=rented[0];setForm({property_id:p?.id||'',month:new Date().toISOString().slice(0,7),expected:p?.total_rent||'',received:'',notes:''});setModal('new');}}>+ Zahlung</button>
+      </div>
+    </div>
     <div style={{display:'flex',gap:4,marginBottom:20,background:'var(--surface2)',padding:3,borderRadius:10,maxWidth:300}}><button className={`btn btn-sm ${tab==='monthly'?'btn-primary':'btn-ghost'}`} style={{flex:1}} onClick={()=>setTab('monthly')}>Monatlich</button><button className={`btn btn-sm ${tab==='yearly'?'btn-primary':'btn-ghost'}`} style={{flex:1}} onClick={()=>setTab('yearly')}>Jahresübersicht</button></div>
-    {tab==='yearly'&&<div className="stat-grid"><div className="stat-card"><div className="label">Einnahmen</div><div className="value" style={{color:'var(--accent)'}}>{fmt(totalRec)}</div></div><div className="stat-card"><div className="label">Kosten</div><div className="value" style={{color:'var(--red)'}}>{fmt(totalCosts)}</div></div><div className="stat-card"><div className="label">Cashflow</div><div className="value" style={{color:totalRec-totalCosts>=0?'var(--accent)':'var(--red)'}}>{fmt(totalRec-totalCosts)}</div></div></div>}
+    {tab==='yearly'&&<div className="stat-grid"><div className="stat-card"><div className="label">Einnahmen</div><div className="value" style={{color:'var(--accent)'}}>{fmt(totalRec)}</div></div><div className="stat-card"><div className="label">Ausstehend</div><div className="value" style={{color:totalExp-totalRec>0?'var(--red)':'var(--accent)'}}>{fmt(totalExp-totalRec)}</div></div><div className="stat-card"><div className="label">Kosten</div><div className="value" style={{color:'var(--red)'}}>{fmt(totalCosts)}</div></div><div className="stat-card"><div className="label">Cashflow</div><div className="value" style={{color:totalRec-totalCosts>=0?'var(--accent)':'var(--red)'}}>{fmt(totalRec-totalCosts)}</div></div></div>}
     {months.map(m=>{const mp=data.payments.filter(p=>p.month===m);const exp=mp.reduce((s,p)=>s+(p.expected||0),0);const rec=mp.reduce((s,p)=>s+(p.received||0),0);return(<div key={m} className="card" style={{marginBottom:16,padding:0}}>
-      <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}><strong>{monthName(m)}</strong><div style={{display:'flex',gap:12,fontSize:13}}><span>Soll: <strong>{fmt(exp)}</strong></span><span>Ist: <strong style={{color:rec<exp?'var(--red)':'var(--accent)'}}>{fmt(rec)}</strong></span>{rec<exp&&<span className="badge badge-red">−{fmt(exp-rec)}</span>}</div></div>
-      {mp.map(p=>{const prop=data.properties.find(x=>x.id===p.property_id);return(<div key={p.id} style={{padding:'10px 18px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:13}}><span className="fw-600">{prop?.name||'–'}</span><div style={{display:'flex',gap:16,alignItems:'center'}}><span>{fmt(p.expected)}</span><span style={{color:p.received<p.expected?'var(--red)':'var(--accent)',fontWeight:600}}>{fmt(p.received)}</span><button className="btn-ghost btn-sm" onClick={()=>{setForm({...p,expected:p.expected||'',received:p.received||'',notes:p.notes||''});setModal('edit');}}>✏️</button></div></div>);})}
+      <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}><strong>{monthName(m)}</strong><div style={{display:'flex',gap:12,fontSize:13}}><span>Soll: <strong>{fmt(exp)}</strong></span><span>Ist: <strong style={{color:rec<exp?'var(--red)':'var(--accent)'}}>{fmt(rec)}</strong></span>{rec<exp&&<span className="badge badge-red">−{fmt(exp-rec)}</span>}{rec>=exp&&exp>0&&<span className="badge badge-green">✓ Vollständig</span>}</div></div>
+      {mp.map(p=>{const prop=data.properties.find(x=>x.id===p.property_id);const paid=p.received>=p.expected&&p.expected>0;return(<div key={p.id} style={{padding:'10px 18px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:13}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}><span className="fw-600">{prop?.name||'–'}</span>{paid&&<span className="badge badge-green" style={{fontSize:10}}>✓</span>}</div>
+        <div style={{display:'flex',gap:12,alignItems:'center'}}>
+          <span>{fmt(p.expected)}</span>
+          <span style={{color:p.received<p.expected?'var(--red)':'var(--accent)',fontWeight:600}}>{fmt(p.received)}</span>
+          {!paid&&p.expected>0&&<button className="btn btn-primary btn-sm" onClick={()=>confirmPayment(p)} title="Zahlungseingang bestätigen">✓ Erhalten</button>}
+          <button className="btn-ghost btn-sm" onClick={()=>{setForm({...p,expected:p.expected||'',received:p.received||'',notes:p.notes||''});setModal('edit');}}>✏️</button>
+        </div>
+      </div>);})}
     </div>);})}
-    {data.payments.length===0&&<div className="empty"><p>Noch keine Zahlungen.</p></div>}
+    {data.payments.length===0&&<div className="empty"><p>Noch keine Zahlungen. Klicke "⚡ Monat vorausfüllen" um die Soll-Mieten automatisch zu erstellen.</p></div>}
     {modal&&<Modal title={modal==='new'?'Zahlung erfassen':'Bearbeiten'} onClose={()=>setModal(null)} footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Abbrechen</button><button className="btn btn-primary" onClick={save}>Speichern</button></>}>
-      <Field label="Immobilie"><select value={form.property_id} onChange={e=>setForm(f=>({...f,property_id:e.target.value}))}>{rented.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+      <Field label="Immobilie"><select value={form.property_id} onChange={e=>{const prop=rented.find(p=>p.id===e.target.value);setForm(f=>({...f,property_id:e.target.value,expected:prop?.total_rent||f.expected}));}}>{rented.map(p=><option key={p.id} value={p.id}>{p.name} ({fmt(p.total_rent)})</option>)}</select></Field>
       <Field label="Monat"><input type="month" value={form.month} onChange={e=>setForm(f=>({...f,month:e.target.value}))}/></Field>
-      <div className="form-row"><Field label="Soll (€)"><input type="number" value={form.expected} onChange={e=>setForm(f=>({...f,expected:e.target.value}))}/></Field><Field label="Ist (€)"><input type="number" value={form.received} onChange={e=>setForm(f=>({...f,received:e.target.value}))}/></Field></div>
+      <div className="form-row"><Field label="Soll-Miete (€)"><input type="number" value={form.expected} onChange={e=>setForm(f=>({...f,expected:e.target.value}))}/></Field><Field label="Ist-Zahlung (€)"><input type="number" value={form.received} onChange={e=>setForm(f=>({...f,received:e.target.value}))}/></Field></div>
       <Field label="Notizen"><textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))}/></Field>
     </Modal>}
   </div>);
